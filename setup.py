@@ -1,21 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Package description
+"""Find web directories without bruteforce
 """
-from setuptools import setup, find_packages
-from distutils.version import LooseVersion
+from setuptools import setup, find_packages, __version__ as setuptool_version
+from distutils.version import StrictVersion
 from distutils.util import convert_path
 from fnmatch import fnmatchcase
 import os
 import sys
-import uuid
-import pip
 
-
-if LooseVersion(pip.__version__) >= "10.0.0":
-    from pip._internal.req import parse_requirements
-else:
-    from pip.req import parse_requirements
 
 ###############################
 #  Configuración del paquete  #
@@ -28,6 +21,11 @@ EMAIL = 'contacto@nekmo.com'
 # Información del paquete
 PACKAGE_NAME = 'dirhunt'
 PACKAGE_DOWNLOAD_URL = 'https://github.com/Nekmo/dirhunt/archive/master.zip'  # .tar.gz
+REQUIREMENTS_FILES = [
+    {'name': 'common-requirements.txt'},
+    {'name': 'py2-requirements.txt', 'marker': 'python_version<"3.0"', "include": sys.version_info < (3,0)},
+    {'name': 'py3-requirements.txt', 'marker': 'python_version>"3.0"', "include": sys.version_info > (3,0)},
+]
 URL = 'https://github.com/Nekmo/dirhunt'
 STATUS_LEVEL = 3  # 1:Planning 2:Pre-Alpha 3:Alpha 4:Beta 5:Production/Stable 6:Mature 7:Inactive
 KEYWORDS = ['directories', 'websec', 'pentesting', 'security-audit']  # Palabras clave
@@ -60,7 +58,7 @@ ROOT_INCLUDE = [
     'VERSION',
     'LICENSE.txt'
 ]
-PYTHON_VERSIONS = ['2.7', '3.4-3.6']
+PYTHON_VERSIONS = ['2.7', '3.5-3.8']
 
 ######## FIN DE LA CONFIGURACIÓN DEL PAQUTE ########
 
@@ -175,14 +173,30 @@ def find_package_data(where='.', package='',
 
 ##############################################################################
 
-# Lista de dependencias a instalar
-if os.path.exists(requirements_path):
-    requirements = parse_requirements(requirements_path, session=uuid.uuid1())
-    install_requires = [str(ir.req) for ir in requirements if not get_url(ir)]
-    dependency_links = [get_url(ir) for ir in requirements if get_url(ir)]
-else:
-    install_requires = []
-    dependency_links = []
+def read_requirements_file(path):
+    if not os.path.lexists(path):
+        return
+    with open(path) as f:
+        lines = f.readlines()
+    for line in lines:
+        line = line.split('#', 1)[0]
+        line = line.strip()
+        if line.startswith('-'):
+            continue
+        yield line
+
+
+def read_requirements_files(files):
+    reqs = []
+    for file in files:
+        if StrictVersion(setuptool_version) >= StrictVersion('20.2'):
+            reqs.extend([('{};{}'.format(req, file['marker']) if file.get('marker') else req)
+                         for req in read_requirements_file(file['name'])])
+        elif file.get('include', True):
+            # Retrocompatibility mode for setuptools < 20.2
+            reqs.extend(list(read_requirements_file(file['name'])))
+    return reqs
+
 
 # Todos los módulos y submódulos a instalar (module, module.submodule, module.submodule2...)
 packages = find_packages(__dir__)
@@ -300,8 +314,7 @@ setup(
     platforms=PLATFORMS,
 
     provides=modules,
-    install_requires=install_requires,
-    dependency_links=dependency_links,
+    install_requires=read_requirements_files(REQUIREMENTS_FILES),
 
     packages=packages,
     include_package_data=True,
@@ -314,7 +327,8 @@ setup(
     keywords=KEYWORDS,
     scripts=scripts,
 
-    # entry_points={},
+    entry_points={'console_scripts':
+                      ['dirhunt = dirhunt.management:main']},
 
     zip_safe=False,
 )

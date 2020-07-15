@@ -1,42 +1,23 @@
 # -*- coding: utf-8 -*-
 import re
+import sys
+
+from dirhunt.directory_lists import get_directory_list
+
+if sys.version_info < (3,):
+    reload(sys)
+    sys.setdefaultencoding("utf-8")
 
 from bs4 import Comment
 from colorama import Fore, Back
 
 from dirhunt.colors import status_code_colors
 from dirhunt.crawler_url import CrawlerUrl
-from dirhunt.url import Url
+from dirhunt.url import Url, full_url_address
+from dirhunt.url_loop import is_url_loop
 from dirhunt.utils import colored
 
 INDEX_FILES = ['index.php', 'index.html', 'index.html']
-ACCEPTED_PROTOCOLS = ['http', 'https']
-
-
-def full_url_address(address, url):
-    """
-
-    :type url: Url
-    :type address: str
-    :rtype :Url
-
-    """
-    if address is None:
-        return
-    protocol_match = address.split(':', 1)[0] if ':' in address else ''
-    protocol_match = re.match('^([A-z0-9\\-]+)$', protocol_match)
-    if protocol_match and protocol_match.group(1) not in ACCEPTED_PROTOCOLS:
-        return
-    # TODO: mejorar esto. Aceptar otros protocolos  a rechazar
-    if address.startswith('//'):
-        address = address.replace('//', '{}://'.format(url.protocol), 1)
-    if '://' not in address or address.startswith('/'):
-        url = url.copy()
-        url.path = address
-        return url
-    url = Url(address)
-    if url.is_valid():
-        return url
 
 
 class ProcessBase(object):
@@ -48,7 +29,7 @@ class ProcessBase(object):
     def __init__(self, response, crawler_url):
         """
 
-        :type crawler_url: CrawlerUrl
+        :type crawler_url: CrawlerUrl or None
         """
         # TODO: hay que pensar en no pasar response, text y soup por aquí para establecerlo en self,
         # para no llenar la memoria. Deben ser cosas "volátiles".
@@ -94,12 +75,26 @@ class ProcessBase(object):
         body += colored(' ({})'.format(self.name or self.__class__.__name__), Fore.LIGHTYELLOW_EX)
         return body
 
+    def add_url(self, url, depth=3, **kwargs):
+        if is_url_loop(url):
+            return
+        return self.crawler_url.crawler.add_url(CrawlerUrl(self.crawler_url.crawler, url, depth, self.crawler_url,
+                                                           timeout=self.crawler_url.timeout, **kwargs))
+
     def __str__(self):
         body = self.url_line()
         if self.index_file:
             body += colored('\n    Index file found: ', Fore.BLUE)
             body += '{}'.format(self.index_file.name)
         return body
+
+    def json(self):
+        return {
+            'processor_class': '{}'.format(self.__class__.__name__),
+            'status_code': self.status_code,
+            'crawler_url': self.crawler_url.json(),
+            'line': str(self),
+        }
 
 
 class Error(ProcessBase):
@@ -125,6 +120,21 @@ class Error(ProcessBase):
         pass
 
 
+class Message(Error):
+    def __init__(self, error, level='ERROR'):
+        super(Error, self).__init__(None, CrawlerUrl(None, ''))
+        self.error = error
+        self.level = level
+
+    def __str__(self):
+        body = colored('[{}]'.format(self.level), Back.LIGHTRED_EX, Fore.LIGHTWHITE_EX)
+        body += colored(' {}'.format(self.error), Fore.LIGHTYELLOW_EX)
+        return body
+
+    def maybe_directory(self):
+        return True
+
+
 class GenericProcessor(ProcessBase):
     name = 'Generic'
     key_name = 'generic'
@@ -143,8 +153,8 @@ class ProcessRedirect(ProcessBase):
         self.redirector = full_url_address(response.headers.get('Location'), self.crawler_url.url)
 
     def process(self, text, soup=None):
-        self.crawler_url.crawler.add_url(CrawlerUrl(self.crawler_url.crawler, self.redirector, 3, self.crawler_url,
-                                                    timeout=self.crawler_url.timeout))
+        if not self.crawler_url.crawler.not_allow_redirects:
+            self.add_url(self.redirector)
 
     @classmethod
     def is_applicable(cls, request, text, crawler_url, soup):
@@ -184,6 +194,23 @@ class ProcessNotFound(ProcessBase):
         return flags
 
 
+class ProcessCssStyleSheet(ProcessBase):
+    name = 'CSS StyleSheet'
+    key_name = 'css'
+
+    def process(self, text, soup=None):
+        if sys.version_info > (3,) and isinstance(text, bytes):
+            text = text.decode('utf-8')
+        urls = [full_url_address(url, self.crawler_url.url) for url in re.findall(': *url\(["\']?(.+?)["\']?\)', text)]
+        for url in urls:
+            self.add_url(url, depth=0, type='asset')
+        return urls
+
+    @classmethod
+    def is_applicable(cls, response, text, crawler_url, soup):
+        return response.headers.get('Content-Type', '').lower().startswith('text/css') and response.status_code < 300
+
+
 class ProcessHtmlRequest(ProcessBase):
     name = 'HTML document'
     key_name = 'html'
@@ -206,20 +233,18 @@ class ProcessHtmlRequest(ProcessBase):
                 depth -= 1
             if depth <= 0:
                 continue
-            self.crawler_url.crawler.add_url(CrawlerUrl(self.crawler_url.crawler, link, depth, self.crawler_url,
-                                                        timeout=self.crawler_url.timeout))
+            self.add_url(link, depth)
 
     def assets(self, soup):
         assets = [full_url_address(link.attrs.get('href'), self.crawler_url.url)
-                   for link in soup.find_all('link')]
+                  for link in soup.find_all('link')]
         assets += [full_url_address(script.attrs.get('src'), self.crawler_url.url)
                    for script in soup.find_all('script')]
         assets += [full_url_address(img.attrs.get('src'), self.crawler_url.url)
                    for img in soup.find_all('img')]
         for asset in filter(bool, assets):
             self.analyze_asset(asset)
-            self.crawler_url.crawler.add_url(CrawlerUrl(self.crawler_url.crawler, asset, 3, self.crawler_url,
-                                                        type='asset', timeout=self.crawler_url.timeout))
+            self.add_url(asset, type='asset')
 
     def analyze_asset(self, asset):
         """
@@ -245,12 +270,11 @@ class ProcessIndexOfRequest(ProcessHtmlRequest):
     index_titles = ('index of', 'directory listing for')
 
     def process(self, text, soup=None):
-        links = [full_url_address(link.attrs.get('href'), self.crawler_url.url)
-                   for link in soup.find_all('a')]
-        for link in filter(lambda x: x.url.endswith('/'), links):
-            self.crawler_url.crawler.add_url(CrawlerUrl(self.crawler_url.crawler, link, 3, self.crawler_url,
-                                                        type='directory', timeout=self.crawler_url.timeout))
-        self.files = [Url(link) for link in links]
+        directory_list = get_directory_list(text, self, soup)
+        links = [link for link in directory_list.get_links(text, soup) if link.is_valid()]
+        for link in filter(lambda x: x.is_valid() and x.url.endswith('/'), links):
+            self.add_url(link, type='directory')
+        self.files = links
 
     def interesting_ext_files(self):
         return filter(lambda x: x.name.split('.')[-1] in self.crawler_url.crawler.interesting_extensions, self.files)
@@ -269,13 +293,21 @@ class ProcessIndexOfRequest(ProcessHtmlRequest):
         name_files = list(self.interesting_name_files())
         if ext_files:
             body += colored('\n    Interesting extension files:', Fore.BLUE)
-            body += ' {}'.format(', '.join(map(lambda x: x.name, ext_files)))
+            body += ' {}'.format(', '.join(map(lambda x: self.repr_file(x), ext_files)))
         if name_files:
             body += colored('\n    Interesting file names:', Fore.MAGENTA)
-            body += ' {}'.format(', '.join(map(lambda x: x.name, name_files)))
+            body += ' {}'.format(', '.join(map(lambda x: self.repr_file(x), name_files)))
         if not ext_files and not name_files:
             body += colored(' (Nothing interesting)', Fore.LIGHTYELLOW_EX)
         return body
+
+    @classmethod
+    def repr_file(cls, file):
+        text = file.name
+        created_at, filesize = file.extra.get('created_at'), file.extra.get('filesize')
+        if created_at or filesize:
+            text += ' ({})'.format(u' ⚫ '.join(filter(bool, [created_at, filesize])))
+        return text
 
     @classmethod
     def is_applicable(cls, response, text, crawler_url, soup):
@@ -333,6 +365,7 @@ def get_processor(response, text, crawler_url, soup):
 PROCESSORS = [
     ProcessRedirect,
     ProcessNotFound,
+    ProcessCssStyleSheet,
     ProcessIndexOfRequest,
     ProcessBlankPageRequest,
     ProcessHtmlRequest,

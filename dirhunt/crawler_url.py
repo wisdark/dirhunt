@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
+import socket
+
 from bs4 import BeautifulSoup
 from requests import RequestException
+from urllib3.exceptions import ReadTimeoutError
 
 from dirhunt.url import Url
-
+from dirhunt.url_loop import is_url_loop
 
 MAX_RESPONSE_SIZE = 1024 * 512
 FLAGS_WEIGHT = {
@@ -36,6 +39,7 @@ class CrawlerUrl(object):
         if url.is_valid() and (not url.path or url.path == '/'):
             self.type = 'directory'
         self.resp = None
+        self.processor_data = None
 
     def add_self_directories(self, exists=None, type_=None):
         for url in self.url.breadcrumb():
@@ -48,28 +52,40 @@ class CrawlerUrl(object):
 
         session = self.crawler.sessions.get_session()
         try:
-            resp = session.get(self.url.url, stream=True, timeout=self.timeout, allow_redirects=False)
+            resp = session.get(self.url.url, stream=True, verify=False, timeout=self.timeout, allow_redirects=False)
         except RequestException as e:
+            self.crawler.current_processed_count += 1
             self.crawler.results.put(Error(self, e))
             self.close()
             return self
 
         self.set_type(resp.headers.get('Content-Type'))
         self.flags.add(str(resp.status_code))
+
         text = ''
         soup = None
-
         processor = None
-        if resp.status_code < 300 and self.maybe_directory():
-            text = resp.raw.read(MAX_RESPONSE_SIZE, decode_content=True)
-            soup = BeautifulSoup(text, 'html.parser')
-        if self.maybe_directory():
+        if resp.status_code < 300 and self.must_be_downloaded(resp):
+            try:
+                text = resp.raw.read(MAX_RESPONSE_SIZE, decode_content=True)
+            except (RequestException, ReadTimeoutError, socket.timeout) as e:
+                self.crawler.current_processed_count += 1
+                self.crawler.results.put(Error(self, e))
+                self.close()
+                return self
+            soup = BeautifulSoup(text, 'html.parser') if resp.headers.get('Content-Type') == 'text/html' else None
+        if self.must_be_downloaded(resp):
             processor = get_processor(resp, text, self, soup) or GenericProcessor(resp, self)
             processor.process(text, soup)
-            self.crawler.results.put(processor)
             self.flags.update(processor.flags)
+        if self.maybe_directory():
+            self.crawler.results.put(processor)
+        if processor is not None:
+            self.processor_data = processor.json()
         if processor and isinstance(processor, ProcessIndexOfRequest):
             self.crawler.index_of_processors.append(processor)
+        else:
+            self.crawler.current_processed_count += 1
         # TODO: Podemos fijarnos en el processor.index_file. Si existe y es un 200, entonces es que existe.
         if self.exists is None and resp.status_code < 404:
             self.exists = True
@@ -88,6 +104,11 @@ class CrawlerUrl(object):
     def maybe_rewrite(self):
         return self.type not in ['asset', 'directory']
 
+    def must_be_downloaded(self, response):
+        """The file must be downloaded to obtain information.
+        """
+        return self.maybe_directory() or (response.headers.get('Content-Type') in ['text/css'])
+
     def maybe_directory(self):
         return self.type not in ['asset', 'document', 'rewrite'] or self.type in ['directory']
 
@@ -104,3 +125,12 @@ class CrawlerUrl(object):
     def close(self):
         self.crawler.processed[self.url.url] = self
         del self.crawler.processing[self.url.url]
+
+    def json(self):
+        return {
+            'flags': self.flags,
+            'depth': self.depth,
+            'url': self.url,
+            'type': self.type,
+            'exists': self.exists,
+        }

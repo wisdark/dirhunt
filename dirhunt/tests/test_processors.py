@@ -7,8 +7,9 @@ from bs4 import BeautifulSoup
 
 from dirhunt.crawler import Crawler
 from dirhunt.processors import ProcessHtmlRequest, ProcessIndexOfRequest, ProcessBlankPageRequest, ProcessNotFound, \
-    ProcessRedirect, Error
+    ProcessRedirect, Error, ProcessCssStyleSheet
 from dirhunt.tests.base import CrawlerTestBase
+from dirhunt.tests.test_directory_lists import TestCommonDirectoryList
 
 
 class TestError(CrawlerTestBase, unittest.TestCase):
@@ -70,6 +71,23 @@ class TestProcessNotFound(CrawlerTestBase, unittest.TestCase):
         crawler_url.exists = True
         process = ProcessNotFound(None, crawler_url)
         str(process)
+
+
+class TestProcessCssStyleSheet(CrawlerTestBase, unittest.TestCase):
+    css = 'body { background-image: url("img/foo.png") }'
+
+    def test_is_applicable(self):
+        crawler_url = self.get_crawler_url()
+        with requests_mock.mock() as m:
+            m.get(self.url, text=self.css, headers={'Content-Type': 'text/css'})
+            r = requests.get(self.url)
+            self.assertTrue(ProcessCssStyleSheet.is_applicable(r, self.css, crawler_url, None))
+
+    def test_process(self):
+        process = ProcessCssStyleSheet(None, self.get_crawler_url())
+        urls = process.process(self.css, None)
+        links = [link.url for link in urls]
+        self.assertEqual(links, ['http://domain.com/path/img/foo.png'])
 
 
 class TestProcessHtmlRequest(CrawlerTestBase, unittest.TestCase):
@@ -160,15 +178,10 @@ class TestProcessIndexOfRequest(CrawlerTestBase, unittest.TestCase):
 
     def test_process(self):
         process = ProcessIndexOfRequest(None, self.get_crawler_url())
-        process.process(self.html, BeautifulSoup(self.html, 'html.parser'))
-        urls = [file.url for file in process.files]
-        self.assertEqual(urls, [
-            'http://domain.com/',
-            'http://domain.com/path/dir/',
-            'http://domain.com/path/foo.php',
-            'http://domain.com/path/error_log',
-            'http://domain.com/spam/eggs',
-        ])
+        process.process(TestCommonDirectoryList.html,
+                        BeautifulSoup(TestCommonDirectoryList.html, 'html.parser'))
+        links = [link.url for link in process.files]
+        self.assertEqual(links, TestCommonDirectoryList.urls)
 
     def test_interesting_ext_files(self):
         process = ProcessIndexOfRequest(None, self.get_crawler_url())

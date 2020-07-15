@@ -14,7 +14,8 @@ Example::
 
     Usage: dirhunt [OPTIONS] [URLS]...
 
-      :param int threads: :type exclude_flags: list
+      One or more domain or urls. Load urls from files using the /full/path or
+      ./relative/path.
 
     Options:
       -t, --threads INTEGER           Number of threads to use.
@@ -30,15 +31,26 @@ Example::
                                       flags
       --progress-enabled / --progress-disabled
       --timeout INTEGER
+      --max-depth INTEGER             Maximum links to follow without increasing
+                                      directories depth
+      --not-follow-subdomains         The subdomains will be ignored
+      --exclude-sources TEXT          Exclude source engines. Possible options:
+                                      robots, virustotal, google
+      -p, --proxies TEXT              Set one or more proxies to alternate between
+                                      them
+      -d, --delay FLOAT               Delay between requests to avoid bans by the
+                                      server
+      --not-allow-redirects           Redirectors will not be followed
+      --limit INTEGER                 Max number of pages processed to search for
+                                      directories.
       --version
       --help                          Show this message and exit.
 
 
-
 Find directories
 ----------------
-You can define one or more urls, from the same domain or different. It is better if you put urls with complete
-routes. This way Dirhunt will have easier to find directories.
+You can define one or more urls/domains, from the same domain or different. It is better if you put urls with complete
+paths. This way Dirhunt will have easier to find directories.
 
 .. code::
 
@@ -46,7 +58,157 @@ routes. This way Dirhunt will have easier to find directories.
 
 For example::
 
-    $ dirhunt http://domain1/blog/awesome-post.html http://domain1/admin/login.html http://domain2/
+    $ dirhunt http://domain1/blog/awesome-post.html http://domain1/admin/login.html http://domain2/ domain3.com
+
+
+Results for multiple sites will be displayed together. You can also load urls or domains from one or more files using
+ the full path (/path/to/file) or the relative path (./file). Examples::
+
+    dirhunt domain1.com ./file/to/domains.txt /home/user/more_domains.txt
+
+
+Resume analysis
+---------------
+Press ``Ctrl + c`` to pause the current scan. For example::
+
+
+    ...
+    [200] https://site.com/path/  (Generic)
+        Index file found: index.php
+    [200] https://site.com/path/foo/  (Generic)
+        Index file found: index.php
+    ◣ Started a second ago
+    ^C
+
+    An interrupt signal has been detected. what do you want to do?
+
+      [A]bort
+      [c]ontinue
+      [r]esults
+    Enter a choice [A/c/r]:
+
+
+You can continue the analysis now (choose option ``c`` ), show the current results (press ``r`` ) or
+abort now. Run the analysis again with the same parameters to pick the analysis where you left off.
+
+.. code-block:: text
+
+    An interrupt signal has been detected. what do you want to do?
+
+      [A]bort
+      [c]ontinue
+      [r]esults
+    Enter a choice [A/c/r]: A
+    Created resume file "/home/nekmo/.cache/dirhunt/ca32...". Run again using the same parameters to resume.
+
+
+Save results to file
+--------------------
+Use the ``--to-file`` option to create a JSON file with the results. The file is created even if you abort the
+current analysis. You can continue an aborted scan using the ``--to-file`` parameter again. The syntax is:
+
+.. code-block::
+
+    $ dirhunt <url> --to-file <json file>
+
+For example::
+
+    $ dirhunt http://domain1/blog/ --to-file report.json
+
+Report example:
+
+.. code-block:: json
+
+    {
+        "version": "0.7.0",
+        "current_processed_count": 10,
+        "domains": [
+            "localhost"
+        ],
+        "index_of_processors": [
+            {
+                "crawler_url": {
+                    "depth": -1,
+                    "exists": true,
+                    "flags": [
+                        "200",
+                        "index_of"
+                    ],
+                    "type": "directory",
+                    "url": {
+                        "address": "http://localhost/foo/img/",
+                        "domain": "localhost"
+                    }
+                },
+                "line": "...",
+                "processor_class": "ProcessIndexOfRequest",
+                "status_code": 200
+            }
+        ],
+        "processed": [
+            {
+                "crawler_url": {
+                    "depth": 3,
+                    "exists": null,
+                    "flags": [
+                        "404",
+                        "not_found"
+                    ],
+                    "type": null,
+                    "url": {
+                        "address": "http://localhost/folder1/",
+                        "domain": "localhost"
+                    }
+                },
+                "line": "...",
+                "processor_class": "ProcessNotFound",
+                "status_code": 404
+            }
+        ],
+        "processing": [
+            "http://localhost/other/"
+        ],
+        "urls_infos": [
+            {
+                "data": {
+                    "body": null,
+                    "resp": {
+                        "headers": {
+                            "Accept-Ranges": "bytes",
+                            "Connection": "keep-alive",
+                            "Content-Length": "24",
+                            "Content-Type": "application/octet-stream",
+                            "Date": "Mon, 27 Apr 2020 22:57:23 GMT",
+                            "ETag": "\"5ea76330-18\"",
+                            "Last-Modified": "Mon, 27 Apr 2020 22:56:48 GMT",
+                            "Server": "nginx/1.16.1"
+                        },
+                        "status_code": 200
+                    },
+                    "text": " This is a hack script!\n",
+                    "title": null
+                },
+                "text": "This is a hack script!",
+                "url": {
+                    "address": {
+                        "address": "http://localhost/foo/img/",
+                        "domain": "localhost"
+                    },
+                    "domain": "localhost"
+                }
+            }
+        ]
+    }
+
+Sections in the report:
+
+* **version**: Dirhunt version of the report. It is only possible to resume an analysis of the same version of Dirhunt.
+* **current_processed_count**: number of urls processed during the analysis.
+* **domains**: domains added to the analysis.
+* **index_of_processors**: urls processed of type *index of*.
+* **processed**: other urls processed during the analysis.
+* **processing**: urls found but not processed. There are only urls to process in case of aborting the analysis.
+* **urls_infos**: info about the detected urls.
 
 
 Interesting extensions
@@ -146,14 +308,72 @@ Other flags:
 
 Threads
 -------
-Dirhunt makes multiple simultaneous requests using threads. By default the number of threads is ``cpu count * 5``.
-You can change the threads count using ``--threads <count>`` (``-t <count>``). For example::
+Dirhunt makes multiple simultaneous requests using threads by default. The default number of threads is
+``cpu count * 5``. If you use the ``--delay`` option, the *simultaneous requests mode* is disabled and the number of
+threads by default is ``number of proxies``. If you do not use proxies in ``--delay`` mode, the default threads
+number is 1. You can change the threads count using ``--threads <count>`` (``-t <count>``). Usage::
 
-    $ dirhunt <url> --threads <url>
+    $ dirhunt <url> --threads <count>
 
 For example::
 
     $ dirhunt http://domain1/blog/ --threads 10
+
+
+Delay
+-----
+This mode deactivates *simultaneous requests mode* and it activates a waiting time from the end of a request
+and the next one begins. By default delay is **disabled**. Use this mode only if the server is restricting requests.
+You can improve the performance of this option using multiple proxies. Usage::
+
+    $ dirhunt <url> --delay <float>
+
+For example::
+
+    $ dirhunt http://domain1/blog/ --delay 0.1
+
+
+Proxies
+-------
+You can use one or multiple proxies for your requests using ``--proxies`` option. Dirhunt will balance the load
+between proxies. If you are not restricting requests using ``--delay`` option then dirhunt will use the proxy that is
+not in use. If there is no free proxy available then dirhunt will use a random proxy. Usage::
+
+    $ dirhunt <url> --proxies <proxy 1>[, <proxy 2>]
+
+If you use "none" as a proxy then Dirhunt will not use a proxy. This is useful if you want to combine
+proxies and your real internet connection. For example::
+
+    $ dirhunt http://domain1/blog/ --proxies http://localhost:3128,none
+
+
+Dirhunt includes an alias called ``tor`` for ``socks5://127.0.0.1:9150``. For example::
+
+    $ dirhunt http://domain1/blog/ --proxies tor
+
+
+Dirhunt can also search for free proxies thanks to `proxy-db <https://github.com/Nekmo/proxy-db>`_. This library
+creates a database of proxies that scores. To use a free proxy use `random`::
+
+    $ dirhunt http://domain1/blog/ --proxies random
+
+
+To avoid being banned you can switch between several proxies. For example::
+
+    $ dirhunt http://domain1/blog/ --proxies random*8
+
+
+You can also use a proxie from a country. `Here <https://dev.maxmind.com/geoip/legacy/codes/iso3166/>`_ is a
+complete list of countries. For example to navigate from Spain::
+
+    $ dirhunt http://domain1/blog/ --proxies es
+
+The proxies option allows you to improve the performance of the ``--delay`` option. The delay time is independent
+for each proxy. Use multiple proxies to improve your scan. You can repeat the same proxy several times to allow
+multiple requests from the same proxy when the delay option is used. You can also repeat a proxy several times
+to increase the use of a proxy. A shortcut to repeating a proxy is to use the mult operator (*). For example::
+
+    $ dirhunt http://domain1/blog/ --proxies http://localhost:3128,tor*8
 
 
 Timeout
@@ -166,6 +386,69 @@ By default Dirhunt only waits up to 10 seconds for each url. You can increase or
 For example::
 
     $ dirhunt http://domain1/blog/ --timeout 15
+
+
+Max follow links depth
+----------------------
+Maximum links to follow without increasing directories depth. By default 3. For example in redirects
+``/index.php > /about.php > /map.php > /contactus.php`` the last page can not redirect to another page at the same
+directory level because it has exceeded the default limit of 3. Usage::
+
+    $ dirhunt <url> --max-depth <number>
+
+For example::
+
+    $ dirhunt http://domain1/blog/ --max-depth 3
+
+
+Limit
+-----
+Dirhunt follows links on the page to obtain directories. In addition to the ``--max-depth`` limit, there is a
+maximum of pages processed for find links. The default limit is 1000 but can be changed using ``--limit <number>``.
+To deactivate the limit (unlimited) use zero: ``--limit 0``. Usage::
+
+    $ dirhunt <url> --limit <number>
+
+For example::
+
+    $ dirhunt http://domain1/blog/ --limit 2000
+
+
+Not follow subdomains
+---------------------
+Dirhunt by default will follow all the subdomains of the domain urls. For example if Dirhunt finds webmail.site.com
+on site.com dirhunt will follow the link. You can disable this feature using the flag ``--not-follow-subdomains``.
+Usage::
+
+    $ dirhunt <url> --not-follow-subdomains
+
+For example::
+
+    $ dirhunt http://domain1/blog/ --not-follow-subdomains
+
+
+Exclude sources
+---------------
+Dirhunt by default will get urls from different sources. You can disable some or all of the engines using the
+``--exclude-sources`` option. Usage::
+
+    $ dirhunt <url> --exclude-sources <sources comma separated>
+
+For example::
+
+    $ dirhunt http://domain1/blog/ --exclude-sources robots,virustotal
+
+
+Not allow redirectors
+----------------------
+Dirhunt by default will follow redirectors within the website (HTTP Redirectors). You can disable this feature using
+the flag ``--not-allow-redirectors``. Usage::
+
+    $ dirhunt <url> --not-allow-redirectors
+
+For example::
+
+    $ dirhunt http://domain1/blog/ --not-allow-redirectors
 
 
 Comma separated files
@@ -215,8 +498,8 @@ Also use this command to see if Dirhunt is out of date.
 .. code::
 
     $ dirhunt --version
-    You are running Dirhunt v0.2.0 using Python 3.6.3.
-    There is a new version available: 0.3.0. Upgrade it using: sudo pip install -U dirhunt
+    You are running Dirhunt v0.3.0 using Python 3.6.5.
+    There is a new version available: 0.4.0. Upgrade it using: sudo pip install -U dirhunt
     Installation path: /home/nekmo/Workspace/dirhunt/dirhunt
     Current path: /home/nekmo/Workspace/dirhunt
 

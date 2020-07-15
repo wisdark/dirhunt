@@ -2,6 +2,57 @@
 History
 =======
 
+0.7.0 (2020-04-28)
+------------------
+
+* Report to file (issue #62)
+* Resume scan after close Dirhunt (issue #53)
+* Option to stop analysis and go to results by pressing ctrl+c (issue #61)
+* Process CSS files (issue #84)
+* Catch None in function is_url_loop (issue #66)
+* Exclude sources from tests (issue #67)
+* Missing dependencies for SOCKS support (issue #72)
+* Test Python 3.8 on Travis (issue #74)
+* Remove Python 3.4 support (issue #75)
+
+
+0.6.0 (2018-11-01)
+------------------
+
+* Search on Google (issue #2)
+* Find and use free random proxies (issue #33)
+* Extract dates and match different date files (issue #26)
+* Limit of processed pages (issue #51 & issue #52)
+* Mult operator (*) in argument proxies (issue #55)
+* Switch for domain list (issue #39)
+* WARNING:urllib3.connectionpool:Connection pool is full, discarding connection (isse #56)
+* TypeError: 'NoneType' object is not subscriptable in url.py, line 147 (issue #57)
+* Catch UrlInfo read exceptions (issue #58)
+* Error in resp.raw.read(MAX_RESPONSE_SIZE, decode_content=True) (issue #59)
+
+
+0.5.0 (2018-09-04)
+------------------
+
+* Command not found issue for Windows (issue #40)
+* Search on VirusTotal (issue #31)
+* Delay between requests (issue #14 & issue #48)
+* Set proxies (issue #32 & issue #47)
+* Tor proxy alias (issue #49)
+
+
+0.4.0 (2018-07-23)
+------------------
+
+* Use robots.txt (issue #1)
+* Detect and mitigate recursion loops (issue #23)
+* Improved installation process compatibility (issue #35)
+* Python 3.7 compatibility (issue #34)
+* Option ``--not-allow-redirects`` (issue #15)
+* Option ``--not-follow-subdomains`` (issue #16)
+* Option ``--max-depth`` to follow link (issue #17)
+
+
 0.3.0 (2018-04-16)
 ------------------
 
