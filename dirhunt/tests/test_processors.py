@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 
 from dirhunt.crawler import Crawler
 from dirhunt.processors import ProcessHtmlRequest, ProcessIndexOfRequest, ProcessBlankPageRequest, ProcessNotFound, \
-    ProcessRedirect, Error, ProcessCssStyleSheet
+    ProcessRedirect, Error, ProcessCssStyleSheet, ProcessJavaScript
 from dirhunt.tests.base import CrawlerTestBase
 from dirhunt.tests.test_directory_lists import TestCommonDirectoryList
 
@@ -90,6 +90,30 @@ class TestProcessCssStyleSheet(CrawlerTestBase, unittest.TestCase):
         self.assertEqual(links, ['http://domain.com/path/img/foo.png'])
 
 
+class TestProcessJavaScript(CrawlerTestBase, unittest.TestCase):
+    js = """
+    "http://example.com" "/wrong/file/test<>b" "api/create.php?user=test"
+    "index.html"
+    """
+
+    def test_is_applicable(self):
+        crawler_url = self.get_crawler_url()
+        with requests_mock.mock() as m:
+            m.get(self.url, text=self.js, headers={'Content-Type': 'application/javascript'})
+            r = requests.get(self.url)
+            self.assertTrue(ProcessJavaScript.is_applicable(r, self.js, crawler_url, None))
+
+    def test_process(self):
+        process = ProcessJavaScript(None, self.get_crawler_url())
+        urls = process.process(self.js, None)
+        links = [link.url for link in urls]
+        self.assertEqual(links, [
+            'http://example.com/',
+            'http://domain.com/path/api/create.php',
+            'http://domain.com/path/index.html',
+        ])
+
+
 class TestProcessHtmlRequest(CrawlerTestBase, unittest.TestCase):
 
     def test_process(self):
@@ -108,7 +132,7 @@ class TestProcessHtmlRequest(CrawlerTestBase, unittest.TestCase):
                 'http://domain.com/path/index.php',
             })
 
-    def test_links(self):
+    def test_href_links(self):
         html = """
         <a href="..">Top</a>
         <a href="dir/">dir</a>
@@ -126,6 +150,17 @@ class TestProcessHtmlRequest(CrawlerTestBase, unittest.TestCase):
                 'http://domain.com/path/foo.php',
                 'http://domain.com/spam/eggs',
             ])
+
+    def test_refresh_links(self):
+        html = """
+        <meta http-equiv="refresh" content="0;URL=/someotherdirectory">
+        """
+        with patch.object(Crawler, 'add_url') as mock_method:
+            process = ProcessHtmlRequest(None, self.get_crawler_url())
+            soup = BeautifulSoup(html, 'html.parser')
+            process.links(soup)
+            args, kwargs = mock_method.call_args_list[0]
+            self.assertEqual(args[0].url, 'http://domain.com/someotherdirectory')
 
     def test_assets(self):
         html = """
