@@ -4,9 +4,9 @@
 |
 
 
-.. image:: https://img.shields.io/travis/Nekmo/dirhunt.svg?style=flat-square&maxAge=2592000
-  :target: https://travis-ci.org/Nekmo/dirhunt
-  :alt: Latest Travis CI build status
+.. image:: https://img.shields.io/github/workflow/status/Nekmo/dirhunt/Tests.svg?style=flat-square&maxAge=2592000
+  :target: https://github.com/Nekmo/dirhunt/actions?query=workflow%3ATests
+  :alt: Latest Tests CI build status
 
 .. image:: https://img.shields.io/pypi/v/dirhunt.svg?style=flat-square
   :target: https://pypi.org/project/dirhunt/
@@ -16,7 +16,7 @@
   :target: https://pypi.org/project/dirhunt/
   :alt: Python versions
 
-.. image:: https://img.shields.io/codeclimate/github/Nekmo/dirhunt.svg?style=flat-square
+.. image:: https://img.shields.io/codeclimate/maintainability/Nekmo/dirhunt.svg?style=flat-square
   :target: https://codeclimate.com/github/Nekmo/dirhunt
   :alt: Code Climate
 
@@ -27,10 +27,6 @@
 .. image:: https://img.shields.io/requires/github/Nekmo/dirhunt.svg?style=flat-square
      :target: https://requires.io/github/Nekmo/dirhunt/requirements/?branch=master
      :alt: Requirements Status
-
-
-**DEVELOPMENT BRANCH**: The current branch is a development version. Go to the stable release by clicking
-on `the master branch <https://github.com/Nekmo/dirhunt/tree/master>`_.
 
 
 Dirhunt
@@ -68,7 +64,12 @@ Features
 * Process some html files in search of new directories.
 * 404 error pages and detect **fake 404 errors**.
 * Filter results by **flags**.
-* Analyze results at end.
+* Analyze results at end. It also **processes date & size** of the Index Pages.
+* Get new directories using **robots.txt**, **VirusTotal** & **Google**.
+* **Delay** between requests.
+* One or multiple **proxies** option. It can also search for **free proxies**.
+* **Save the results** to a JSON file (NEW!)
+* **Resume** the aborted scans (NEW!)
 
 
 Install
@@ -77,7 +78,7 @@ If you have Pip installed on your system, you can use it to install the latest D
 
     $ sudo pip3 install dirhunt
 
-Python 2.7 & 3.4-3.6 are supported but Python 3.x is recommended. Use ``pip2`` on install for Python2.
+Python 2.7 & 3.5-3.8 are supported but Python 3.x is recommended. Use ``pip2`` on install for Python2.
 
 There are other `installation methods <http://docs.nekmo.org/dirhunt/installation.html>`_ available.
 

@@ -4,3 +4,5 @@ click
 humanize
 colorama
 requests-mock
+google
+proxy-db

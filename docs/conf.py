@@ -42,7 +42,11 @@ import dirhunt
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode']
+extensions = [
+    'sphinx.ext.autodoc',
+    'sphinx.ext.viewcode',
+    'sphinx_click.ext'
+]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -125,7 +129,7 @@ html_theme_options = {
     'github_repo': 'dirhunt',
     'github_type': 'star',
     'github_banner': True,
-    'travis_button': True,
+    'travis_button': False,
     'codecov_button': True,
     'analytics_id': 'UA-62276079-1',
     'canonical_url': 'http://docs.nekmo.org/Dirhunt/'

@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
 import re
+import socket
 import string
 import sys
+from operator import itemgetter
 from threading import Lock
 
+import six
 from bs4 import BeautifulSoup
 from click import get_terminal_size
 from colorama import Fore
 from requests import RequestException
+from urllib3.exceptions import ReadTimeoutError
 
 from dirhunt.cli import random_spinner
 from dirhunt.colors import status_code_colors
@@ -16,18 +20,25 @@ from dirhunt.pool import Pool
 from dirhunt.utils import colored, remove_ansi_escape
 
 MAX_RESPONSE_SIZE = 1024 * 512
-
+DEFAULT_UNKNOWN_SIZE = '???'
+EXTRA_ORDER = ['created_at', 'filesize']
 
 def sizeof_fmt(num, suffix='B'):
     if num is None:
-        return '???'
-    if isinstance(num, str):
+        return DEFAULT_UNKNOWN_SIZE
+    if isinstance(num, six.string_types):
         num = int(num)
     for unit in ['','Ki','Mi','Gi','Ti','Pi','Ei','Zi']:
         if abs(num) < 1024.0:
             return "%d%s%s" % (num, unit, suffix)
         num /= 1024.0
     return "%d%s%s" % (num, 'Yi', suffix)
+
+
+def format_extra(extra, length=0):
+    length = max(0, length - 2)
+    return ('[{:<%d}]' % length).format(' '.join(map(itemgetter(1), sorted(extra.items(),
+                                                                           key=lambda x: EXTRA_ORDER.index(x[0])))))
 
 
 class UrlInfo(object):
@@ -43,12 +54,12 @@ class UrlInfo(object):
     def get_data(self):
         session = self.sessions.get_session()
         try:
-            resp = session.get(self.url.url, stream=True, timeout=self.timeout, allow_redirects=False)
+            resp = session.get(self.url.url, stream=True, verify=False, timeout=self.timeout, allow_redirects=False)
         except RequestException:
             raise RequestError
         try:
             text = resp.raw.read(MAX_RESPONSE_SIZE, decode_content=True)
-        except RequestException:
+        except (RequestException, ReadTimeoutError, socket.timeout):
             raise RequestError
         try:
             soup = BeautifulSoup(text, 'html.parser')
@@ -102,27 +113,47 @@ class UrlInfo(object):
             self._text = self.get_text()
         return self._text
 
-    def line(self, line_size, url_column):
+    def line(self, line_size, url_column, extra_len):
         if not len(self.text):
             raise EmptyError
-        if len(self.url_info) + url_column + 20 < line_size:
-            return self.one_line(line_size, url_column)
+        if len(self.url_info) + url_column + extra_len + 20 < line_size:
+            return self.one_line(line_size, url_column, extra_len)
         else:
-            return self.multi_line(line_size)
+            return self.multi_line(line_size, extra_len)
 
-    def one_line(self, line_size, url_column):
+    def one_line(self, line_size, url_column, extra_len):
         text = self.text[:line_size-url_column-len(list(remove_ansi_escape(self.url_info)))-3]
         out = self.url_info
         out += colored(('{:<%d}' % url_column).format(self.url.url), Fore.LIGHTBLUE_EX) + "  "
+        if self.url.extra:
+            out += colored(' {} '.format(format_extra(self.url.extra, extra_len)), Fore.LIGHTBLUE_EX)
         out += text
         return out
 
-    def multi_line(self, line_size):
+    def multi_line(self, line_size, extra_len):
         out = colored('┏', Fore.LIGHTBLUE_EX) + ' {} {}\n'.format(
             self.url_info, colored(self.url.url, Fore.LIGHTBLUE_EX)
         )
-        out += colored('┗', Fore.LIGHTBLUE_EX) + ' {}'.format(self.text[:line_size-2])
+        out += colored('┗', Fore.LIGHTBLUE_EX)
+        if self.url.extra:
+            out += colored(' {}'.format(format_extra(self.url.extra, extra_len)), Fore.LIGHTBLUE_EX)
+        out += ' {}'.format(self.text[:line_size-2])
         return out
+
+    def json(self):
+        return {
+            'text': self.text,
+            'url': self.url.json(),
+            'data': {
+                'text': self.data['text'],
+                'title': self.data['title'],
+                'body': self.data['body'],
+                'resp': {
+                    'headers': dict(self.data['resp'].headers),
+                    'status_code': self.data['resp'].status_code,
+                },
+            }
+        }
 
 
 class UrlsInfo(Pool):
@@ -132,7 +163,8 @@ class UrlsInfo(Pool):
     count = 0
     current = 0
 
-    def __init__(self, processors, sessions, std=None, max_workers=None, progress_enabled=True, timeout=10):
+    def __init__(self, processors, sessions, std=None, max_workers=None, progress_enabled=True, timeout=10,
+                 save_info=False):
         super(UrlsInfo, self).__init__(max_workers)
         self.lock = Lock()
         self.processors = processors
@@ -141,19 +173,25 @@ class UrlsInfo(Pool):
         self.spinner = random_spinner()
         self.progress_enabled = progress_enabled
         self.timeout = timeout
+        self.urls_info = []
+        self.lines = []
+        self.save_info = save_info
 
-    def callback(self, url_len, file):
-        line = None
+    def callback(self, url_len, extra_len, file):
+        url_info = None
         try:
-            line = self._get_url_info(url_len, file)
+            url_info = self._get_url_info(file)
         except EmptyError:
             self.empty_files += 1
         except RequestError:
             self.error_files += 1
         self.lock.acquire()
         self.erase()
-        if line:
-            self.echo(line)
+        if self.save_info:
+            self.urls_info.append(url_info)
+        if url_info:
+            size = get_terminal_size()
+            self.echo(url_info.line(size[0], url_len, extra_len))
         self.print_progress()
         self.lock.release()
 
@@ -173,9 +211,8 @@ class UrlsInfo(Pool):
         self.std.write(str(body))
         self.std.write('\n')
 
-    def _get_url_info(self, url_len, file):
-        size = get_terminal_size()
-        return UrlInfo(self.sessions, file.address, self.timeout).line(size[0], url_len)
+    def _get_url_info(self, file):
+        return UrlInfo(self.sessions, file, self.timeout)
 
     def getted_interesting_files(self):
         for processor in self.processors:
@@ -186,11 +223,14 @@ class UrlsInfo(Pool):
         self.echo('Starting...')
         self.count = 0
         url_len = 0
+        extra_len = 0
         for file in self.getted_interesting_files():
             url_len = max(url_len, len(file.url))
+            extra_len = max(extra_len, len(format_extra(file.extra)))
             self.count += 1
         for file in self.getted_interesting_files():
-            self.submit(url_len, file)
+            # TODO: issue #26. Añadir len() de contenido extra
+            self.submit(url_len, extra_len, file)
         out = ''
         if self.empty_files:
             out += 'Empty files: {} '.format(self.empty_files)
