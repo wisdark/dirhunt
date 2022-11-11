@@ -1,5 +1,6 @@
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import mock_open
 
 from dirhunt import __version__
 from dirhunt.tests._compat import Mock, patch
@@ -45,21 +46,23 @@ class TestCrawler(CrawlerTestBase, unittest.TestCase):
         crawler.print_results()
 
     @patch('dirhunt.crawler.json.dump')
-    def test_create_report(self, m):
+    @patch('builtins.open')
+    def test_create_report(self, _, mock_dump):
         crawler = self.get_crawler()
         crawler.results.put(GenericProcessor(None, CrawlerUrl(crawler, self.url)))
         crawler.create_report(crawler.get_resume_file())
-        m.assert_called_once()
+        mock_dump.assert_called_once()
 
     @patch('dirhunt.crawler.json.load', return_value=REPORT_DATA)
     @patch('dirhunt.crawler.Crawler.echo', return_value=REPORT_DATA)
     @patch('dirhunt.crawler.Crawler.add_url', return_value=REPORT_DATA)
-    def test_resume(self, m1, m2, m3):
+    @patch('builtins.open')
+    def test_resume(self, _, m1, m2, m3):
         crawler = self.get_crawler()
         crawler.resume(crawler.get_resume_file())
         m3.assert_called_once()
         m2.assert_called_once()
-        m1.assert_called_once_with(REPORT_DATA['processing'][0])
+        m1.assert_called_once_with(REPORT_DATA['processing'][0], lock=False)
 
     def test_print_results_limit(self):
         crawler = self.get_crawler(limit=1)

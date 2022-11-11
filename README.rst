@@ -65,8 +65,8 @@ Features
 * 404 error pages and detect **fake 404 errors**.
 * Filter results by **flags**.
 * Analyze results at end. It also **processes date & size** of the Index Pages.
-* Get new directories using **robots.txt**, **VirusTotal**, **Google**, **CommonCrawl** (NEW!) &
-  **SSL Certificate** (NEW!).
+* Get new directories using **robots.txt**, **VirusTotal**, **Google**, **CommonCrawl** (NEW!),
+  **SSL Certificate** (NEW!), **Crt.sh** (NEW!) & **Wayback** (NEW!).
 * **Delay** between requests.
 * One or multiple **proxies** option. It can also search for **free proxies**.
 * **Save the results** to a JSON file
@@ -79,7 +79,7 @@ If you have Pip installed on your system, you can use it to install the latest D
 
     $ sudo pip3 install dirhunt
 
-Python 2.7 & 3.5-3.8 are supported but Python 3.x is recommended. Use ``pip2`` on install for Python2.
+Python 2.7 & 3.5-3.10 are supported but Python 3.x is recommended. Use ``pip2`` on install for Python2.
 
 There are other `installation methods <http://docs.nekmo.org/dirhunt/installation.html>`_ available.
 
