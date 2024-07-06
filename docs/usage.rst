@@ -217,6 +217,25 @@ You can also load file names from one or more local files::
 You can read more about this `here <#id3>`_
 
 
+Interesting keywords
+--------------------
+Dirhunt can warn you if it finds a specific keyword in the response body. This will only work if the response body is
+available in a index of, html, css or js file.
+
+.. code::
+
+    $ dirhunt <url> -k <name 1>[,<name 2>]
+
+For example::
+
+    $ dirhunt http://domain1/blog/ -k "admin,login,pass"
+
+
+You can also load keywords from one or more local files::
+
+    $ dirhunt http://domain1/blog/ -k /home/user/keywords.txt,./words.txt
+
+
 Exclude
 -------
 Filter the results using the ``--exclude-flags`` (``-x``) parameter (see the `flags section <#Flags>`_ to
@@ -438,6 +457,11 @@ Example for **interesting files** (``-f``)::
 
 It is necessary to put the complete path to the file, or the relative using ``./``. Each value of the files must be
 separated by newlines.
+
+This is also possible with urls even if they are not separated by commas. For example::
+
+    $ dirhunt http://domain1/blog/ ./urls1.txt http://domain2/blog/ ./urls2.txt
+
 
 Custom headers
 --------------

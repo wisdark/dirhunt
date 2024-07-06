@@ -3,8 +3,11 @@
 
 |
 
+.. image:: https://raw.githubusercontent.com/Nekmo/dirhunt/pip-rating-badge/pip-rating-badge.svg
+  :target: https://github.com/Nekmo/dirhunt/actions/workflows/pip-rating.yml
+  :alt: pip-rating badge
 
-.. image:: https://img.shields.io/github/workflow/status/Nekmo/dirhunt/Tests.svg?style=flat-square&maxAge=2592000
+.. image:: https://img.shields.io/github/actions/workflow/status/Nekmo/dirhunt/test.yml?style=flat-square&maxAge=2592000&branch=develop
   :target: https://github.com/Nekmo/dirhunt/actions?query=workflow%3ATests
   :alt: Latest Tests CI build status
 
@@ -24,9 +27,9 @@
   :target: https://codecov.io/github/Nekmo/dirhunt
   :alt: Test coverage
 
-.. image:: https://img.shields.io/requires/github/Nekmo/dirhunt.svg?style=flat-square
-     :target: https://requires.io/github/Nekmo/dirhunt/requirements/?branch=master
-     :alt: Requirements Status
+.. image:: https://img.shields.io/github/stars/Nekmo/dirhunt?style=flat-square
+     :target: https://github.com/Nekmo/dirhunt
+     :alt: Github stars
 
 
 Dirhunt
@@ -79,7 +82,7 @@ If you have Pip installed on your system, you can use it to install the latest D
 
     $ sudo pip3 install dirhunt
 
-Python 2.7 & 3.5-3.10 are supported but Python 3.x is recommended. Use ``pip2`` on install for Python2.
+Python 2.7 & 3.7-3.12 are supported but Python 3.x is recommended. Use ``pip2`` on install for Python2.
 
 There are other `installation methods <http://docs.nekmo.org/dirhunt/installation.html>`_ available.
 

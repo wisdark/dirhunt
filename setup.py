@@ -21,11 +21,7 @@ EMAIL = 'contacto@nekmo.com'
 # Información del paquete
 PACKAGE_NAME = 'dirhunt'
 PACKAGE_DOWNLOAD_URL = 'https://github.com/Nekmo/dirhunt/archive/master.zip'  # .tar.gz
-REQUIREMENTS_FILES = [
-    {'name': 'common-requirements.txt'},
-    {'name': 'py2-requirements.txt', 'marker': 'python_version<"3.0"', "include": sys.version_info < (3,0)},
-    {'name': 'py3-requirements.txt', 'marker': 'python_version>"3.0"', "include": sys.version_info > (3,0)},
-]
+REQUIREMENTS_FILE = 'requirements.in'
 URL = 'https://github.com/Nekmo/dirhunt'
 STATUS_LEVEL = 3  # 1:Planning 2:Pre-Alpha 3:Alpha 4:Beta 5:Production/Stable 6:Mature 7:Inactive
 KEYWORDS = ['directories', 'websec', 'pentesting', 'security-audit']  # Palabras clave
@@ -58,7 +54,7 @@ ROOT_INCLUDE = [
     'VERSION',
     'LICENSE.txt'
 ]
-PYTHON_VERSIONS = ['2.7', '3.5-3.10']
+PYTHON_VERSIONS = ['2.7', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
 
 ######## FIN DE LA CONFIGURACIÓN DEL PAQUTE ########
 
@@ -174,28 +170,8 @@ def find_package_data(where='.', package='',
 ##############################################################################
 
 def read_requirements_file(path):
-    if not os.path.lexists(path):
-        return
     with open(path) as f:
-        lines = f.readlines()
-    for line in lines:
-        line = line.split('#', 1)[0]
-        line = line.strip()
-        if line.startswith('-'):
-            continue
-        yield line
-
-
-def read_requirements_files(files):
-    reqs = []
-    for file in files:
-        if LooseVersion(setuptool_version) >= LooseVersion('20.2'):
-            reqs.extend([('{};{}'.format(req, file['marker']) if file.get('marker') else req)
-                         for req in read_requirements_file(file['name'])])
-        elif file.get('include', True):
-            # Retrocompatibility mode for setuptools < 20.2
-            reqs.extend(list(read_requirements_file(file['name'])))
-    return reqs
+        return f.readlines()
 
 
 # Todos los módulos y submódulos a instalar (module, module.submodule, module.submodule2...)
@@ -268,30 +244,7 @@ def frange(x, y, jump):
         x += jump
 
 
-python_versions = []
-for version in PYTHON_VERSIONS:
-    if '-' in version:
-        version = version.split('-')
-        if len(version) != 2:
-            raise ValueError('Invalid Python version range: {}'.format('-'.join(version)))
-        version = list(map(float, version))
-        version[1] += 0.1  # Para que frange incluya la última versión
-        python_versions.extend(frange(version[0], version[1], 0.1))
-    elif isinstance(version, int) or version.isdigit():
-        python_versions.append(str(version))
-    else:
-        python_versions.append(float(version))
-python_versions = map(lambda x: x if isinstance(x, str) else '%.1f' % x, python_versions)
-# Eliminar versiones 0-2.3 y 2.8-2.9
-remove_python_versions = map(str, list(frange(0, 2.3, 0.1)) + list(frange(2.8, 3.0, 0.1)))
-python_versions = list(filter(lambda x: x not in remove_python_versions, python_versions))
-for version in range(2, 4):
-    if not len(list(filter(lambda x: int(float(x)) != version, python_versions))):
-        # Sólo se encuentran versiones para la versión <version>
-        python_versions.append('%i :: Only' % version)
-        break
-CLASSIFIERS.extend(['Programming Language :: Python :: %s' % version for version in python_versions])
-
+CLASSIFIERS.extend(['Programming Language :: Python :: %s' % version for version in PYTHON_VERSIONS])
 CLASSIFIERS.extend([
     'Natural Language :: {}'.format(NATURAL_LANGUAGE),
     'Development Status :: {} - {}'.format(STATUS_LEVEL, status_name),
@@ -314,7 +267,7 @@ setup(
     platforms=PLATFORMS,
 
     provides=modules,
-    install_requires=read_requirements_files(REQUIREMENTS_FILES),
+    install_requires=read_requirements_file(REQUIREMENTS_FILE),
 
     packages=packages,
     include_package_data=True,
